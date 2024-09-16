@@ -1,6 +1,8 @@
 ﻿from abc import ABC, abstractmethod
 import cv2
 import numpy as np
+import logging
+logging.basicConfig(level=logging.INFO)
 # Step 1: Abstract handler class
 class Preprocessor(ABC):
     def __init__(self):
@@ -40,7 +42,7 @@ class ResizePreprocessor(PreprocessLayer):
 
     def process(self, image):
         resized_image = cv2.resize(image, (self.width, self.height))
-        print("Resized image")
+        logging.debug("Resized image")
         return super().process(resized_image)
 
 # Step 2: Concrete handler for converting to grayscale
@@ -48,14 +50,14 @@ class GrayscalePreprocessor(PreprocessLayer):
     def process(self, image):
         assert len(image.shape) == 3, "image already has one chanel"
         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        print("Converted to grayscale")
+        logging.debug("Converted to grayscale")
         return super().process(gray_image)
 
 # Step 2: Concrete handler for normalization
 class NormalizePreprocessor(PreprocessLayer):
     def process(self, image):
         norm_image = image / 255.0  # Normalizing pixel values between 0 and 1
-        print("Normalized image")
+        logging.debug("Normalized image")
         return super().process(norm_image)
 
 class MedianBlurPreprocessor(PreprocessLayer):
@@ -65,7 +67,7 @@ class MedianBlurPreprocessor(PreprocessLayer):
 
     def process(self, image):
         final = cv2.medianBlur(image, self.kernel_size)
-        print("Blured image")
+        logging.debug("Blured image")
         return super().process(final)
 
 # Step 2: Concrete handler for adaptive gamma correction
@@ -96,7 +98,7 @@ class GammaCorrectionPreprocessor(PreprocessLayer):
             self.gamma = self.adaptive_gamma(image)
 
         corrected_image = self.apply_gamma_correction(image, self.gamma)
-        print(f"Applied gamma correction with gamma: {self.gamma}")
+        logging.debug(f"Applied gamma correction with gamma: {self.gamma}")
         return super().process(corrected_image)
 
 # Step 2: Concrete handler for multi-scale morphological transformation
@@ -112,7 +114,7 @@ class MultiScaleMorphologicalPreprocessor(PreprocessLayer):
         # Ensure image is in uint8 format
         if image.dtype != np.uint8:
             image_uint8 = np.clip(image * 255.0, 0, 255).astype(np.uint8)
-            print("Converted image to uint8 for morphological operations")
+            logging.debug("Converted image to uint8 for morphological operations")
         else:
             image_uint8 = image
 
@@ -129,7 +131,7 @@ class MultiScaleMorphologicalPreprocessor(PreprocessLayer):
                 morphed = cv2.morphologyEx(image_uint8, cv2.MORPH_CLOSE, kernel, iterations=self.iterations)
             else:
                 raise ValueError(f"Unsupported morphological operation: {self.operation}")
-            print(f"Applied {self.operation} with kernel size {size}")
+            logging.debug(f"Applied {self.operation} with kernel size {size}")
             transformed_images.append(morphed)
 
         # Combine the transformed images
@@ -140,5 +142,5 @@ class MultiScaleMorphologicalPreprocessor(PreprocessLayer):
             elif self.operation == 'erode':
                 combined_image = cv2.min(combined_image, img)
 
-        print("Combined multi-scale morphological transformations")
+        logging.debug("Combined multi-scale morphological transformations")
         return super().process(combined_image)

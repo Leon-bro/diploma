@@ -4,7 +4,9 @@ from tensorflow.keras import layers, Model
 def conv_block(inputs, filters):
     """Basic convolutional block with two Conv2D layers."""
     x = layers.Conv2D(filters, (3, 3), padding="same", activation="relu")(inputs)
+    x = layers.BatchNormalization()(x)
     x = layers.Conv2D(filters, (3, 3), padding="same", activation="relu")(x)
+    x = layers.BatchNormalization()(x)
     return x
 
 def encoder_block(inputs, filters):
@@ -21,7 +23,7 @@ def decoder_block(inputs, skip_features, filters):
     return x
 
 def build_unet(input_shape):
-    inputs = tf.keras.layers.Input((512, 512, 3))
+    inputs = tf.keras.layers.Input(input_shape)
     # Encoder
     s1, p1 = encoder_block(inputs, 8)    # 1st layer: 8 filters
     s2, p2 = encoder_block(p1, 16)       # 2nd layer: 16 filters

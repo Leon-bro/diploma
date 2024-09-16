@@ -1,6 +1,6 @@
 ﻿from tensorflow.keras import backend as K
 import tensorflow as tf
-
+import numpy as np
 # Define IoU Metric (Intersection over Union)
 def iou_metric(y_true, y_pred, smooth=1e-6):
     y_true_f = K.flatten(y_true)
