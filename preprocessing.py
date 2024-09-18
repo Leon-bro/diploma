@@ -2,11 +2,15 @@
 import cv2
 import numpy as np
 import logging
+
 logging.basicConfig(level=logging.INFO)
+
+
 # Step 1: Abstract handler class
 class Preprocessor(ABC):
     def __init__(self):
         self.next_handler = None
+
     def __call__(self, handler):
         handler.next_handler = self
 
@@ -15,24 +19,74 @@ class Preprocessor(ABC):
         if self.next_handler:
             return self.next_handler.process(image)
         return image
+
+
 class PreprocessLayer(Preprocessor):
     def __call__(self, handler):
         super().__call__(handler)
         return self
-    
+
+
+class CropBlackBox(PreprocessLayer):
+    def __init__(self):
+        super().__init__()
+
+    def process(self, image):
+        assert len(image.shape) == 2
+        assert image is not None, "file could not be read, check with os.path.exists()"
+
+        def crop_black_box(image):
+            """
+            Crops the black border from the image.
+            
+            Parameters:
+            image (numpy.ndarray): Input image with a possible black border.
+            
+            Returns:
+            cropped_image (numpy.ndarray): Image with black border cropped out.
+            """
+            # Convert to grayscale if the image is colored (RGB or BGR)
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = image  # Already grayscale
+
+            # Threshold the image to binary: pixels below 10 intensity are black
+            _, thresh = cv2.threshold(gray, gray.max()*0.06, gray.max(), cv2.THRESH_BINARY)
+
+            # Find the coordinates of the non-black pixels
+            coords = np.column_stack(np.where(thresh > 0))
+
+            # Get the bounding box of the non-black area
+            if coords.size == 0:
+                # If the image is entirely black, return the original image
+                return image
+
+            x_min, y_min = coords.min(axis=0)
+            x_max, y_max = coords.max(axis=0)
+
+            # Crop the image using the bounding box
+            cropped_image = image[x_min:x_max + 1, y_min:y_max + 1]
+
+            return cropped_image
+        cropped_image = crop_black_box(image)
+        return super().process(cropped_image)
+
+
 class CLAHE(PreprocessLayer):
     def __init__(self, clipLimit=2.0, tileGridSize=(8, 8)):
         super().__init__()
         self.clipLimit = clipLimit
         self.tileGridSize = tileGridSize
-        
+
     def process(self, image):
         assert len(image.shape) == 2
         assert image is not None, "file could not be read, check with os.path.exists()"
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         preprocessed = clahe.apply(image)
         return super().process(preprocessed)
-    
+
+
 # Step 2: Concrete handler for resizing
 class ResizePreprocessor(PreprocessLayer):
     def __init__(self, width=512, height=512):
@@ -41,9 +95,10 @@ class ResizePreprocessor(PreprocessLayer):
         self.height = height
 
     def process(self, image):
-        resized_image = cv2.resize(image, (self.width, self.height))
+        resized_image = cv2.resize(image, (self.width, self.height), interpolation=cv2.INTER_CUBIC)
         logging.debug("Resized image")
         return super().process(resized_image)
+
 
 # Step 2: Concrete handler for converting to grayscale
 class GrayscalePreprocessor(PreprocessLayer):
@@ -53,12 +108,16 @@ class GrayscalePreprocessor(PreprocessLayer):
         logging.debug("Converted to grayscale")
         return super().process(gray_image)
 
+
 # Step 2: Concrete handler for normalization
 class NormalizePreprocessor(PreprocessLayer):
     def process(self, image):
-        norm_image = image / 255.0  # Normalizing pixel values between 0 and 1
-        logging.debug("Normalized image")
+        norm_image = image
+        if image.max() > 1.0:
+            norm_image = image / 255.0  # Normalizing pixel values between 0 and 1
+            logging.debug("Normalized image")
         return super().process(norm_image)
+
 
 class MedianBlurPreprocessor(PreprocessLayer):
     def __init__(self, kernel_size=3):
@@ -69,6 +128,7 @@ class MedianBlurPreprocessor(PreprocessLayer):
         final = cv2.medianBlur(image, self.kernel_size)
         logging.debug("Blured image")
         return super().process(final)
+
 
 # Step 2: Concrete handler for adaptive gamma correction
 class GammaCorrectionPreprocessor(PreprocessLayer):
@@ -100,6 +160,7 @@ class GammaCorrectionPreprocessor(PreprocessLayer):
         corrected_image = self.apply_gamma_correction(image, self.gamma)
         logging.debug(f"Applied gamma correction with gamma: {self.gamma}")
         return super().process(corrected_image)
+
 
 # Step 2: Concrete handler for multi-scale morphological transformation
 class MultiScaleMorphologicalPreprocessor(PreprocessLayer):

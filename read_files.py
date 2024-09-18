@@ -1,4 +1,6 @@
 ﻿import numpy as np
+from PIL import Image
+import cv2
 def read_ppm(file_path):
     with open(file_path, 'rb') as f:
         # Read header
@@ -35,3 +37,24 @@ def read_ppm(file_path):
         # Reshape it to (height, width, 3)
         image = pixels_np.reshape((height, width, 3))
         return width, height, max_val, image
+    
+def read_static_image(file_path):
+    im = cv2.imread(file_path)
+    return im
+def read_gif(file_path):
+    im = Image.open(file_path)
+    im.seek(im.tell())
+    im = np.array(im)
+    im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
+    return im
+
+def read_image(file_path):
+    im = None
+    if file_path.endswith('.gif'):
+        im = read_gif(file_path)
+    elif file_path.endswith('.ppm'):
+        im = read_ppm(file_path)[-1]
+    else:
+        im = read_static_image(file_path)
+    assert im is not None, "File cannot be read"
+    return im
