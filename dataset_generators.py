@@ -4,10 +4,7 @@ from preprocessing import *
 
 # Function to preprocess images and labels
 def load_data(image_path, label_path, mask_path, image_preproc:PreprocessLayer, label_preproc:PreprocessLayer):
-    # Convert the TensorFlow Tensor object to a string
-    image_path = image_path.decode('utf-8')
-    label_path = label_path.decode('utf-8')
-    mask_path = mask_path.decode('utf-8')
+
     # Load image and label
     image = cv2.imread(image_path)[..., 1]
     try:
