@@ -6,7 +6,8 @@ from preprocessing import *
 def load_data(image_path, label_path, mask_path, image_preproc:PreprocessLayer, label_preproc:PreprocessLayer):
 
     # Load image and label
-    image = cv2.imread(image_path)[..., 1]
+    image = cv2.imread(image_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     try:
         label = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)

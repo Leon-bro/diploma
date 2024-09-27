@@ -114,7 +114,7 @@ class NormalizePreprocessor(PreprocessLayer):
     def process(self, image):
         norm_image = image
         if image.max() > 1.0:
-            norm_image = image / 255.0  # Normalizing pixel values between 0 and 1
+            norm_image = (image - image.min())/(image.max()-image.min())#image / 255.0  # Normalizing pixel values between 0 and 1
             logging.debug("Normalized image")
         return super().process(norm_image)
 

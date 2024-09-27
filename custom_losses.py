@@ -16,3 +16,16 @@ class DiceLoss(tf.keras.losses.Loss):
             y_pred ** self.gama) + tf.reduce_sum(y_true ** self.gama) + self.smooth
         result = 1 - tf.divide(nominator, denominator)
         return result
+
+class CombainedDiceBinaryLoss(tf.keras.losses.Loss):
+    def __init__(self, alpha=0.9):
+        super(CombainedDiceBinaryLoss, self).__init__()
+        self.name = 'CombainedDiceBinaryLoss'
+        self.alpha = alpha
+    def call(self, y_true, y_pred):
+        y_true, y_pred = tf.cast(
+            y_true, dtype=tf.float32), tf.cast(y_pred, tf.float32)
+        binary_loss = tf.losses.binary_crossentropy(y_true, y_pred)
+        dice_loss = DiceLoss()(y_true, y_pred)
+        combined_loss = binary_loss + self.alpha*dice_loss
+        return combined_loss
