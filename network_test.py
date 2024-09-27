@@ -19,14 +19,14 @@ class ModifiedUNet(tf.keras.Model):
         # Encoder: Create the downsampling layers dynamically based on the depth
         for i in range(depth):
             filters = first_filters * (2 ** i)  # Double the filters at each level
-            self.enc_blocks.append(MultiScaleResidualConvolutionModule(filters=filters, block_size=7, drop_rate=0.15, kernel_sizes=kernel_sizes))
+            self.enc_blocks.append(MultiScaleResidualConvolutionModule(filters=filters, block_size=7, keep_prob=0.15, kernel_sizes=kernel_sizes))
             if i < depth - 1:
                 self.sku_blocks.append(SelectiveKernelUnit(filters=filters, reduction=reduction, kernel_sizes=kernel_sizes))
 
         self.pool = layers.MaxPooling2D(pool_size=(2, 2), strides=2)
 
         # Bottleneck
-        self.bottleneck = MultiScaleResidualConvolutionModule(filters=first_filters * (2 ** depth), block_size=7, drop_rate=0.15, kernel_sizes=kernel_sizes)
+        self.bottleneck = MultiScaleResidualConvolutionModule(filters=first_filters * (2 ** depth), block_size=7, keep_prob=0.15, kernel_sizes=kernel_sizes)
 
         # Decoder: Create the upsampling layers dynamically based on the depth
         for i in reversed(range(1, depth)):

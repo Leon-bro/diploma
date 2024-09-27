@@ -111,15 +111,15 @@ class DropBlock2D(tf.keras.layers.Layer):
 
 class MultiScaleResidualConvolutionModule(layers.Layer):
     """Multi-scale residual convolution module with DropBlock and spatial attention."""
-    def __init__(self, filters, block_size=7, drop_rate=0.15, kernel_sizes=(1, 3, 5)):
+    def __init__(self, filters, block_size=7, keep_prob=0.15, kernel_sizes=(1, 3, 5)):
         super(MultiScaleResidualConvolutionModule, self).__init__()
         self.filters = filters
         self.kernel_sizes = kernel_sizes
         self.block_size = block_size
-        self.drop_rate = drop_rate
+        self.drop_rate = keep_prob
         self.first_conv = layers.Conv2D(filters=filters, kernel_size=3, strides=1, padding='same')
         # DropBlock Layer
-        self.drop_block = DropBlock2D(keep_prob=drop_rate, block_size=block_size)
+        self.drop_block = DropBlock2D(keep_prob=keep_prob, block_size=block_size)
         self.bn = layers.BatchNormalization()
         # Define the convolution layers for each kernel size
         self.convs = [layers.Conv2D(filters, kernel_size=k, padding='same', activation='relu') for k in kernel_sizes]

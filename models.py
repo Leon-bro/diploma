@@ -99,21 +99,20 @@ class ModifiedUNet(tf.keras.Model):
         # Encoder: Create the downsampling layers dynamically based on the depth
         for i in range(depth):
             filters = first_filters * (2 ** i)  # Double the filters at each level
-            self.enc_blocks.append(MultiScaleResidualConvolutionModule(filters=filters, block_size=7, drop_rate=0.15, kernel_sizes=kernel_sizes))
+            self.enc_blocks.append(MultiScaleResidualConvolutionModule(filters=filters, block_size=7, keep_prob=0.15, kernel_sizes=kernel_sizes))
             if i < depth - 1:
                 self.sku_blocks.append(SelectiveKernelUnit(filters=filters, reduction=reduction, kernel_sizes=kernel_sizes))
 
         self.pool = layers.MaxPooling2D(pool_size=(2, 2), strides=2)
 
         # Bottleneck
-        self.bottleneck = MultiScaleResidualConvolutionModule(filters=first_filters * (2 ** depth), block_size=7, drop_rate=0.15, kernel_sizes=kernel_sizes)
+        self.bottleneck = MultiScaleResidualConvolutionModule(filters=first_filters * (2 ** depth), block_size=7, keep_prob=0.15, kernel_sizes=kernel_sizes)
 
         # Decoder: Create the upsampling layers dynamically based on the depth
         for i in reversed(range(1, depth)):
             filters = first_filters * (2 ** i)  # Filters for decoder blocks
             self.upconv_blocks.append(layers.Conv2DTranspose(filters=filters, kernel_size=2, strides=2, padding='same'))
             self.dec_blocks.append(ResidualAttentionModule(filters=filters))
-            self.conv1x1_blocks.append(layers.Conv2D(filters=filters, kernel_size=1, padding='same'))  # 1x1 conv to match channels for skip connection
 
         # Final 1x1 convolution to map to num_classes
         self.final_conv = layers.Conv2D(num_classes, kernel_size=1, activation='sigmoid')
@@ -133,13 +132,14 @@ class ModifiedUNet(tf.keras.Model):
 
         # Decoder path with upsampling and skip connections (using SKU)
         for i in range(self.depth - 1):
+
             x = self.upconv_blocks[i](x)  # Upsample feature map
 
             # Adjust skip connection using 1x1 convolution to ensure matching channels
-            skip = self.conv1x1_blocks[i](enc_outputs[self.depth - 2 - i])
+            skip = enc_outputs[self.depth - 2 - i]
 
             # Combine the upsampled feature map with the adjusted skip connection
-            x = self.sku_blocks[i](x + skip)  # Skip connection with SKU
+            x = self.sku_blocks[i](skip)  # Skip connection with SKU
             x = self.dec_blocks[i](x, training=training)
 
         # Final convolution to produce the segmentation map
