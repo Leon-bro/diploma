@@ -2,7 +2,7 @@
 from tensorflow.keras import layers
 from tensorflow.python.keras import backend as K
 class SelectiveKernelUnit(layers.Layer):
-    def __init__(self, filters, reduction=16, kernel_sizes=(1, 3, 5), L=32):
+    def __init__(self, filters, reduction=8, kernel_sizes=(1, 3, 5), L=32):
         super(SelectiveKernelUnit, self).__init__()
         self.filters = filters
         self.kernel_sizes = kernel_sizes
@@ -68,6 +68,7 @@ class DropBlock2D(tf.keras.layers.Layer):
     def build(self, input_shape):
         assert len(input_shape) == 4
         _, self.h, self.w, self.channel = input_shape.as_list()
+        #tf.print(input_shape.as_list())
         # pad the mask
         p1 = (self.block_size - 1) // 2
         p0 = (self.block_size - 1) - p1

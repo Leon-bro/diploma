@@ -1,7 +1,6 @@
 ﻿import tensorflow as tf
 from tensorflow.keras import layers, Model
-from custom_layers import MultiScaleResidualConvolutionModule, SelectiveKernelUnit, ResidualAttentionModule  # Assuming your custom layers file is imported
-
+import custom_layers
 
 
 def conv_block(inputs, filters):
@@ -83,66 +82,71 @@ def create_w_net(input_shape, depth, num_filters):
 
 
 
-class ModifiedUNet(tf.keras.Model):
-    def __init__(self, num_classes, depth=4, first_filters=64, reduction=16, kernel_sizes=(1, 3, 5)):
-        super(ModifiedUNet, self).__init__()
-        self.num_classes = num_classes
-        self.depth = depth
-        self.first_filters = first_filters
+def modified_encoder_block(inputs, filters, keep_prob=0.85, block_size=3):
+    """Encoder block: Multi-scale residual block followed by MaxPooling."""
+    x = custom_layers.MultiScaleResidualConvolutionModule(filters, keep_prob=keep_prob, block_size=block_size)(inputs)
+    p = layers.MaxPooling2D((2, 2))(x)
+    return x, p
 
-        self.enc_blocks = []  # Encoder layers
-        self.sku_blocks = []  # Skip connections with SKU
-        self.upconv_blocks = []  # Upsampling blocks
-        self.dec_blocks = []  # Decoder layers
-        self.conv1x1_blocks = []  # 1x1 conv to match channels for skip connections
+def modified_skip_connection_block(inputs, filters, reduction=8, L=16):
+    """Skip connection block using Selective Kernel Unit (SKU)."""
+    sku = custom_layers.SelectiveKernelUnit(filters)(inputs)
+    add = layers.Add()([inputs, sku])
+    return add
 
-        # Encoder: Create the downsampling layers dynamically based on the depth
-        for i in range(depth):
-            filters = first_filters * (2 ** i)  # Double the filters at each level
-            self.enc_blocks.append(MultiScaleResidualConvolutionModule(filters=filters, block_size=7, keep_prob=0.15, kernel_sizes=kernel_sizes))
-            if i < depth - 1:
-                self.sku_blocks.append(SelectiveKernelUnit(filters=filters, reduction=reduction, kernel_sizes=kernel_sizes))
+def modified_decoder_block(inputs, skip_features, filters):
+    """Decoder block: Conv2DTranspose for upsampling followed by Conv block."""
+    x = layers.Conv2DTranspose(filters, (2, 2), strides=2, padding="same")(inputs)
+    x = layers.Concatenate()([x, skip_features])
+    x = custom_layers.ResidualAttentionModule(filters)(x)
+    return x
 
-        self.pool = layers.MaxPooling2D(pool_size=(2, 2), strides=2)
+def build_munet(input_shape=(128, 128, 1), first_filters=32, depth=4, keep_prob=0.85, block_size=3, reduction=8, L=16):
+    """Build the Modified U-Net with parametrized depth and first_filters."""
+    inputs = layers.Input(shape=input_shape)
 
-        # Bottleneck
-        self.bottleneck = MultiScaleResidualConvolutionModule(filters=first_filters * (2 ** depth), block_size=7, keep_prob=0.15, kernel_sizes=kernel_sizes)
+    # Encoder path
+    encoders = []
+    pools = []
+    skips = []  # Store skip connections
+    filters = first_filters
 
-        # Decoder: Create the upsampling layers dynamically based on the depth
-        for i in reversed(range(1, depth)):
-            filters = first_filters * (2 ** i)  # Filters for decoder blocks
-            self.upconv_blocks.append(layers.Conv2DTranspose(filters=filters, kernel_size=2, strides=2, padding='same'))
-            self.dec_blocks.append(ResidualAttentionModule(filters=filters))
+    for i in range(depth):
+        x, p = modified_encoder_block(inputs if i == 0 else pools[-1], filters, keep_prob=keep_prob, block_size=block_size[i])
+        encoders.append(x)  # Store encoder outputs
+        pools.append(p)  # Store pooled outputs for next depth level
 
-        # Final 1x1 convolution to map to num_classes
-        self.final_conv = layers.Conv2D(num_classes, kernel_size=1, activation='sigmoid')
+        # Apply skip connection (SKU) to encoder output
+        s = modified_skip_connection_block(x, filters, reduction, L)
+        skips.append(s)  # Store skip connections for decoder
+        filters *= 2  # Double the filters at each depth level
 
-    def call(self, inputs, training=None):
-        # Encoder path with Multi-scale convolutions and pooling
-        enc_outputs = []
-        x = inputs
-        for i in range(self.depth):
-            x = self.enc_blocks[i](x, training=training)
-            enc_outputs.append(x)
-            if i < self.depth - 1:  # Apply pooling except at the bottleneck
-                x = self.pool(x)
+    # Bottleneck
+    bottleneck = modified_skip_connection_block(pools[-1], filters // 2)  # Keep bottleneck with same filters as last encoder
 
-        # Bottleneck
-        x = self.bottleneck(x, training=training)
+    # Decoder path
+    filters //= 2  # Reduce filters at each decoding step
+    decoder = bottleneck
 
-        # Decoder path with upsampling and skip connections (using SKU)
-        for i in range(self.depth - 1):
+    for i in range(depth - 1, -1, -1):
+        decoder = modified_decoder_block(decoder, skips[i], filters)  # Use skip connections from the encoder
+        filters //= 2  # Halve the filters at each depth level
 
-            x = self.upconv_blocks[i](x)  # Upsample feature map
+    # Output layer
+    output = layers.Conv2D(1, (1, 1), padding="same", activation="sigmoid")(decoder)
 
-            # Adjust skip connection using 1x1 convolution to ensure matching channels
-            skip = enc_outputs[self.depth - 2 - i]
+    model = tf.keras.Model(inputs=inputs, outputs=output)
+    return model
 
-            # Combine the upsampled feature map with the adjusted skip connection
-            x = self.sku_blocks[i](skip)  # Skip connection with SKU
-            x = self.dec_blocks[i](x, training=training)
+def model_wrapper(model):
+    data_augmentation = tf.keras.Sequential([
+        layers.RandomFlip("horizontal_and_vertical"),
+        layers.RandomRotation(10/360),
+    ])
 
-        # Final convolution to produce the segmentation map
-        output = self.final_conv(x)
-
-        return output
+    # Create a new model that includes the data augmentation
+    augmented_model = tf.keras.models.Sequential([
+        data_augmentation,
+        model
+    ])
+    return augmented_model
