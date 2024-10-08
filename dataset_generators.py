@@ -102,4 +102,8 @@ def generator_with_augmentation(image_paths, label_paths, mask_paths,image_prepr
             image = image[:, :, np.newaxis]
         if len(label.shape)==2:
             label = label[:, :, np.newaxis]
+        if tf.reduce_max(image)>1.:
+            image = image / 255.
+        if tf.reduce_max(label)>1.:
+            label = label / 255.
         yield image, label  # Yield each patch one at a time
