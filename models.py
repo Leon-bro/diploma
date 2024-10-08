@@ -88,9 +88,9 @@ def modified_encoder_block(inputs, filters, keep_prob=0.85, block_size=3):
     p = layers.MaxPooling2D((2, 2))(x)
     return x, p
 
-def modified_skip_connection_block(inputs, filters, reduction=8, L=16):
+def modified_skip_connection_block(inputs, filters, reduction, L):
     """Skip connection block using Selective Kernel Unit (SKU)."""
-    sku = custom_layers.SelectiveKernelUnit(filters)(inputs)
+    sku = custom_layers.SelectiveKernelUnit(filters, reduction=reduction, L=L)(inputs)
     add = layers.Add()([inputs, sku])
     return add
 
@@ -112,7 +112,7 @@ def build_munet(input_shape=(128, 128, 1), first_filters=32, depth=4, keep_prob=
     filters = first_filters
 
     for i in range(depth):
-        x, p = modified_encoder_block(inputs if i == 0 else pools[-1], filters, keep_prob=keep_prob, block_size=block_size[i])
+        x, p = modified_encoder_block(inputs if i == 0 else pools[-1], filters, keep_prob=keep_prob, block_size=block_size)
         encoders.append(x)  # Store encoder outputs
         pools.append(p)  # Store pooled outputs for next depth level
 
@@ -133,20 +133,7 @@ def build_munet(input_shape=(128, 128, 1), first_filters=32, depth=4, keep_prob=
         filters //= 2  # Halve the filters at each depth level
 
     # Output layer
-    output = layers.Conv2D(1, (1, 1), padding="same", activation="sigmoid")(decoder)
+    output = layers.Conv2D(1, (1, 1), padding="same")(decoder)
 
     model = tf.keras.Model(inputs=inputs, outputs=output)
     return model
-
-def model_wrapper(model):
-    data_augmentation = tf.keras.Sequential([
-        layers.RandomFlip("horizontal_and_vertical"),
-        layers.RandomRotation(10/360),
-    ])
-
-    # Create a new model that includes the data augmentation
-    augmented_model = tf.keras.models.Sequential([
-        data_augmentation,
-        model
-    ])
-    return augmented_model
