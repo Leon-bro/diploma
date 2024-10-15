@@ -25,6 +25,7 @@ class SelectiveKernelUnit(layers.Layer):
 
         # Apply BatchNorm and ReLU to each feature map
         feature_maps = [tf.nn.relu(self.bn(fm)) for fm in feature_maps]
+        
         # Step 2: Combine multi-scale features by adding element-wise
         U = tf.add_n(feature_maps)
 

@@ -122,7 +122,7 @@ def build_munet(input_shape=(128, 128, 1), first_filters=32, depth=4, keep_prob=
         filters *= 2  # Double the filters at each depth level
 
     # Bottleneck
-    bottleneck = modified_skip_connection_block(pools[-1], filters // 2)  # Keep bottleneck with same filters as last encoder
+    bottleneck = modified_skip_connection_block(pools[-1], filters // 2, reduction, L)  # Keep bottleneck with same filters as last encoder
 
     # Decoder path
     filters //= 2  # Reduce filters at each decoding step
