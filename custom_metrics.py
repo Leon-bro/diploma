@@ -31,7 +31,7 @@ class DiceCoefficient(tf.keras.metrics.Metric):
     def result(self):
         return (2 * self.true_positives) / (2 * self.true_positives + self.false_positives + self.false_negatives)
 
-    def reset_states(self):
+    def reset_state(self):
         self.true_positives.assign(0)
         self.false_positives.assign(0)
         self.false_negatives.assign(0)
@@ -73,7 +73,7 @@ class Mcc(tf.keras.metrics.Metric):
         # Avoid division by zero
         return tf.where(tf.equal(denominator, 0), 0.0, numerator / denominator)
 
-    def reset_states(self):
+    def reset_state(self):
         # Reset the state variables at the end of an epoch
         self.tp.assign(0)
         self.tn.assign(0)
