@@ -47,7 +47,11 @@ class ConvBlock(tf.keras.layers.Layer):
 
         self.batch_norm = tf.keras.layers.BatchNormalization()
         self.relu = tf.keras.layers.ReLU()
-
+    def build(self, input_shape):
+        self.conv.build(input_shape)
+        self.batch_norm.build(self.conv.compute_output_shape(input_shape))
+        self.relu.build(self.batch_norm.compute_output_shape(self.conv.compute_output_shape(input_shape)))
+        
     def call(self, inputs, **kwargs):
         tensor = self.conv(inputs)
         tensor = self.batch_norm(tensor)
@@ -77,34 +81,25 @@ class AtrousSpatialPyramidPooling(tf.keras.layers.Layer):
                          kernel_initializer=tf.keras.initializers.he_normal())
 
     def build(self, input_shape):
-        dummy_tensor = tf.random.normal(input_shape)  # used for calculating
-        # output shape of convolutional layers
+        self.avg_pool = tf.keras.layers.AveragePooling2D(pool_size=(input_shape[-3], input_shape[-2]))
 
-        self.avg_pool = tf.keras.layers.AveragePooling2D(
-            pool_size=(input_shape[-3], input_shape[-2]))
+        # Convolution for pooled feature map
+        self.conv1 = AtrousSpatialPyramidPooling._get_conv_block(kernel_size=1, dilation_rate=1, use_bias=True)
 
-        self.conv1 = AtrousSpatialPyramidPooling._get_conv_block(
-            kernel_size=1, dilation_rate=1, use_bias=True)
-
-        self.conv2 = AtrousSpatialPyramidPooling._get_conv_block(
-            kernel_size=1, dilation_rate=1)
-
-        dummy_tensor = self.conv1(self.avg_pool(dummy_tensor))
-
+        # Calculate upsampling size based on the input shape
         self.pool = tf.keras.layers.UpSampling2D(
-            size=(
-                input_shape[-3] // dummy_tensor.shape[1],
-                input_shape[-2] // dummy_tensor.shape[2]
-            ),
+            size=(input_shape[-3], input_shape[-2]),  # Upsample to input dimensions
             interpolation='bilinear'
         )
 
-        self.out1, self.out6, self.out12, self.out18 = map(
-            lambda tup: AtrousSpatialPyramidPooling._get_conv_block(
-                kernel_size=tup[0], dilation_rate=tup[1]
-            ),
-            [(1, 1), (3, 6), (3, 12), (3, 18)]
-        )
+        # Define atrous convolution blocks with different dilation rates
+        self.out1 = AtrousSpatialPyramidPooling._get_conv_block(kernel_size=1, dilation_rate=1)
+        self.out6 = AtrousSpatialPyramidPooling._get_conv_block(kernel_size=3, dilation_rate=6)
+        self.out12 = AtrousSpatialPyramidPooling._get_conv_block(kernel_size=3, dilation_rate=12)
+        self.out18 = AtrousSpatialPyramidPooling._get_conv_block(kernel_size=3, dilation_rate=18)
+
+        # Final 1x1 convolution layer
+        self.conv2 = AtrousSpatialPyramidPooling._get_conv_block(kernel_size=1, dilation_rate=1)
 
     def call(self, inputs, **kwargs):
         tensor = self.avg_pool(inputs)
@@ -172,38 +167,20 @@ class DeeplabV3Plus(tf.keras.Model):
                               input_shape) -> tf.keras.Model:
         input_layer = tf.keras.Input(shape=input_shape[1:])
 
-        backbone_model = BACKBONES[self.backbone]['model'](
-            input_tensor=input_layer, weights=None, include_top=False)
-        print(backbone_model.summary())
-        output_layer = backbone_model.get_layer(
-            BACKBONES[self.backbone][feature]).output
+        backbone_model = BACKBONES[self.backbone]['model'](input_tensor=input_layer, weights=None, include_top=False)
+        output_layer = backbone_model.get_layer(BACKBONES[self.backbone][feature]).output
         return tf.keras.Model(inputs=input_layer, outputs=output_layer)
 
     def build(self, input_shape):
-        self.backbone_feature_1 = self._get_backbone_feature('feature_1',
-                                                             input_shape)
-        self.backbone_feature_2 = self._get_backbone_feature('feature_2',
-                                                             input_shape)
-        self.input_a_upsampler_getter = self._get_upsample_layer_fn(
-            input_shape, factor=4)
-
+        self.backbone_feature_1 = self._get_backbone_feature('feature_1', input_shape)
+        self.backbone_feature_2 = self._get_backbone_feature('feature_2', input_shape)
+        self.input_a_upsampler_getter = self._get_upsample_layer_fn(input_shape, factor=4)
         self.aspp = AtrousSpatialPyramidPooling()
-
-        self.input_b_conv = DeeplabV3Plus._get_conv_block(48,
-                                                          kernel_size=(1, 1))
-
-        self.conv1 = DeeplabV3Plus._get_conv_block(256, kernel_size=3,
-                                                   conv_activation='relu')
-
-        self.conv2 = DeeplabV3Plus._get_conv_block(256, kernel_size=3,
-                                                   conv_activation='relu')
-
-        self.otensor_upsampler_getter = self._get_upsample_layer_fn(
-            input_shape, factor=1)
-
-        self.out_conv = tf.keras.layers.Conv2D(self.num_classes,
-                                               kernel_size=(1, 1),
-                                               padding='same')
+        self.input_b_conv = DeeplabV3Plus._get_conv_block(48, kernel_size=(1, 1))
+        self.conv1 = DeeplabV3Plus._get_conv_block(256, kernel_size=3, conv_activation='relu')
+        self.conv2 = DeeplabV3Plus._get_conv_block(256, kernel_size=3, conv_activation='relu')
+        self.otensor_upsampler_getter = self._get_upsample_layer_fn(input_shape, factor=1)
+        self.out_conv = tf.keras.layers.Conv2D(self.num_classes, kernel_size=(1, 1),padding='same', activation="sigmoid")
 
     def call(self, inputs, training=None, mask=None):
         input_a = self.backbone_feature_1(inputs)

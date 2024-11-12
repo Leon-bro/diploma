@@ -173,9 +173,9 @@ class Discriminator(tf.keras.Model):
 
         return x
 class GANModel:
-    def __init__(self, generator, discriminator, lambda_value=100, checkpoint_dir='checkpoints'):
-        self.generator = generator
-        self.discriminator = discriminator
+    def __init__(self, lambda_value=100, checkpoint_dir='checkpoints'):
+        self.generator = Generator()
+        self.discriminator = Discriminator()
         self.lambda_value = lambda_value
         self.gen_optimizer = tf.optimizers.Adam(beta_1=0.5, epsilon=2e-4)
         self.disc_optimizer = tf.optimizers.Adam(beta_1=0.5, epsilon=2e-4)
@@ -185,7 +185,12 @@ class GANModel:
 
         # Checkpoint to save/restore only the generator
         self.checkpoint = tf.train.Checkpoint(generator=self.generator, gen_optimizer=self.gen_optimizer)
-
+    def summary(self):
+        if self.generator is not None:
+            print(self.generator.summary())
+        if self.discriminator is not None:
+            print(self.discriminator.summary())
+        print("Total params: ", self.generator.count_params() + self.discriminator.count_params())
     def discriminator_loss(self, disc_real_output, disc_generated_output):
         real_loss = self.loss_fn(tf.ones_like(disc_real_output), disc_real_output)
         generated_loss = self.loss_fn(tf.zeros_like(disc_generated_output), disc_generated_output)
