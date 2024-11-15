@@ -101,7 +101,7 @@ class Generator(tf.keras.Model):
         x15 = self.up7(x14, x1, training=training) # (bs, 128, 128, 128)
 
         x16 = self.last(x15) # (bs, 256, 256, 3)
-        x16 = tf.nn.tanh(x16)
+        x16 = tf.nn.sigmoid(x16)
 
         return x16
 
@@ -182,6 +182,7 @@ class GANModel:
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
         self.loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+        self.metrics = []
 
         # Checkpoint to save/restore only the generator
         self.checkpoint = tf.train.Checkpoint(generator=self.generator, gen_optimizer=self.gen_optimizer)
@@ -228,34 +229,30 @@ class GANModel:
 
         return gen_loss, disc_loss
 
-    def train(self, dataset, epochs, validation_data=None):
+    def train(self, dataset, epochs, validation_data=None, save_period=5):
         for epoch in range(epochs):
             start = time.time()
             for input_image, target in dataset:
                 gen_loss, disc_loss = self.train_step(input_image, target)
 
             # Save the model checkpoint at the end of each epoch
-            self.save_model()
+            if epoch % save_period == 0:
+                self.save_model()
 
             # Evaluate the generator on the validation data, if provided
-            if validation_data is not None:
-                val_input, val_target = validation_data
-                val_output = self.evaluate(val_input)
-
-                # Binary segmentation validation loss (L1 loss)
-                val_loss = tf.reduce_mean(tf.abs(val_target - val_output))
-
-                print(f'Epoch {epoch + 1}, Gen Loss: {gen_loss}, Disc Loss: {disc_loss}, '
-                      f'Val Loss: {val_loss}, Time: {time.time() - start}s\n')
-            else:
-                print(f'Epoch {epoch + 1}, Gen Loss: {gen_loss}, Disc Loss: {disc_loss}, '
+            print(f'Epoch {epoch + 1}, Gen Loss: {gen_loss}, Disc Loss: {disc_loss}, '
                       f'Time: {time.time() - start}s\n')
+            tf.print('Train evaluate:')
+            self.evaluate(dataset)
+            tf.print('validation evaluate:')
+            self.evaluate(validation_data)
 
     def save_model(self):
         """Saves the generator model and optimizer state."""
         self.checkpoint.save(file_prefix=self.checkpoint_prefix)
         print("Generator model saved.")
-
+    def compile(self, metrics):
+        self.metrics = metrics
     def load_model(self):
         """Loads the generator model and optimizer state."""
         latest = tf.train.latest_checkpoint(self.checkpoint_dir)
@@ -264,8 +261,19 @@ class GANModel:
             print("Generator model restored from", latest)
         else:
             print("No checkpoint found. Starting from scratch.")
+    def evaluate(self, input):
+        values = []
+        for batch in input:
+            im, lb = batch
+            values.append(self._evaluate_step(im, lb))
+        values = tf.reduce_mean(values, axis=0)
+        print(",".join([m.name + '=' + str(v) for m, v in zip(self.metrics, values.numpy())]))
 
-    def evaluate(self, input_image):
+    def _evaluate_step(self, input_image, target):
         """Generates output for a given input image using the generator."""
         prediction = self.generator(input_image, training=False)
-        return prediction
+        values = []
+        for metric in self.metrics:
+            values.append(metric(prediction, target))
+
+        return values

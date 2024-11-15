@@ -52,8 +52,6 @@ def read_image(file_path):
     im = None
     if file_path.endswith('.gif'):
         im = read_gif(file_path)
-    elif file_path.endswith('.ppm'):
-        im = read_ppm(file_path)[-1]
     else:
         im = read_static_image(file_path)
     assert im is not None, "File cannot be read"

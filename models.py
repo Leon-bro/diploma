@@ -140,57 +140,5 @@ def build_munet(input_shape=(128, 128, 1), first_filters=32, depth=4, keep_prob=
     model = tf.keras.Model(inputs=inputs, outputs=output)
     return model
 
-class HardSwish(tf.keras.layers.Layer):
-    def call(self, inputs):
-        return inputs * tf.nn.relu6(inputs + 3) / 6
 
-class SqueezeExcite(tf.keras.layers.Layer):
-    def __init__(self, input_channels, reduction=4):
-        super(SqueezeExcite, self).__init__()
-        self.global_avg_pool = GlobalAveragePooling2D(keepdims=True)
-        reduced_dim = input_channels // reduction
-        self.fc1 = Conv2D(reduced_dim, 1, activation="relu")
-        self.fc2 = Conv2D(input_channels, 1, activation="sigmoid")
-
-    def call(self, inputs):
-        x = self.global_avg_pool(inputs)
-        x = self.fc1(x)
-        x = self.fc2(x)
-        return Multiply()([inputs, x])
-
-class Bottleneck(tf.keras.layers.Layer):
-    def __init__(self, in_channels, out_channels, kernel_size, expansion_factor, stride, use_se, activation):
-        super(Bottleneck, self).__init__()
-        self.stride = stride
-        mid_channels = in_channels * expansion_factor
-
-        self.expand_conv = Conv2D(mid_channels, 1, padding="same", use_bias=False)
-        self.expand_bn = BatchNormalization()
-        self.activation = HardSwish() if activation == "hard_swish" else ReLU()
-
-        self.depthwise_conv = DepthwiseConv2D(kernel_size, strides=stride, padding="same", use_bias=False)
-        self.depthwise_bn = BatchNormalization()
-
-        self.se = SqueezeExcite(mid_channels) if use_se else None
-
-        self.project_conv = Conv2D(out_channels, 1, padding="same", use_bias=False)
-        self.project_bn = BatchNormalization()
-
-    def call(self, inputs):
-        x = self.expand_conv(inputs)
-        x = self.expand_bn(x)
-        x = self.activation(x)
-
-        x = self.depthwise_conv(x)
-        x = self.depthwise_bn(x)
-
-        if self.se:
-            x = self.se(x)
-
-        x = self.project_conv(x)
-        x = self.project_bn(x)
-
-        if self.stride == 1 and x.shape[-1] == inputs.shape[-1]:
-            x = Add()([inputs, x])  # Residual connection
-        return x
 
