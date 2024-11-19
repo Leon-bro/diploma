@@ -128,7 +128,7 @@ class MultiScaleResidualConvolutionModule(layers.Layer):
         self.convs = [layers.Conv2D(filters, kernel_size=k, padding='same') for k in kernel_sizes]
         self.bns = [layers.BatchNormalization() for _ in kernel_sizes]
         # Final 1x1 convolution for residual output
-        self.final_conv = layers.Conv2D(filters, 1, padding='same', activation="relu")
+        self.final_conv = layers.Conv2D(filters, 1, padding='same')
 
     def call(self, inputs, training=False):
         x = self.first_conv(inputs)
@@ -161,62 +161,7 @@ class MultiScaleResidualConvolutionModule(layers.Layer):
         #tf.print("output shape", tf.shape(output))
         return output
 
-class MultiScaleResidualConvolutionModulev2(layers.Layer):
-    """Multi-scale residual convolution module with DropBlock and spatial attention."""
-    def __init__(self, filters, block_size=5, keep_prob=0.85, kernel_sizes=(1, 3, 5)):
-        super(MultiScaleResidualConvolutionModulev2, self).__init__()
-        self.filters = filters
-        self.kernel_sizes = kernel_sizes
-        self.block_size = block_size
-        self.drop_rate = keep_prob
-        self.first_conv = layers.Conv2D(filters=filters, kernel_size=3, strides=1, padding='same')
-        # DropBlock Layer
-        self.drop_block = DropBlock2D(keep_prob=keep_prob, block_size=block_size)
-        self.bn = layers.BatchNormalization()
-        # Define the convolution layers for each kernel size
-        self.convs = []
-        for i in kernel_sizes:
-            if i == 1:
-                self.convs.append(layers.Conv2D(filters=filters, kernel_size=i, strides=1, padding='same'))
-            else:
-                self.convs.append(layers.Conv2D(filters=filters, kernel_size=(1,i), strides=1, padding='same'))
-                self.convs.append(layers.Conv2D(filters=filters, kernel_size=(i,1), strides=1, padding='same'))
-        self.bns = [layers.BatchNormalization() for _ in kernel_sizes]
-        # Final 1x1 convolution for residual output
-        self.final_conv = layers.Conv2D(filters, 1, padding='same', activation="relu")
 
-    def call(self, inputs, training=False):
-        x = self.first_conv(inputs)
-        x = tf.nn.relu(self.bn(self.drop_block(x, training=training)))
-        #tf.print("First conv shape", tf.shape(x))
-        #tf.print("First conv", x)
-        # Step 1: Multi-Scale Convolution
-        feature_maps = [self.convs[0](x)]
-        for i in range(1, len(self.convs), 2):
-            feature_maps.append(self.convs[i](x) * self.convs[i + 1](x))
-        #tf.print("feature_maps shape", tf.shape(feature_maps))
-        # Apply BatchNorm and ReLU
-        feature_maps = [tf.nn.relu(bn(fm)) for fm, bn in zip(feature_maps, self.bns)]
-        #tf.print("relu + bn feature_maps shape", tf.shape(feature_maps))
-        # Step 2: Element-wise addition to combine multi-scale features
-        combined_features = tf.add_n(feature_maps)  # Combine feature maps
-        #tf.print("combined_features shape", tf.shape(combined_features))
-        # Step 4: Global Average Pooling by width and height separately
-        pooled_width = tf.reduce_mean(combined_features, axis=2, keepdims=True)  # Pool across width (axis 2)
-        #tf.print("pooled_width shape", tf.shape(pooled_width))
-        pooled_height = tf.reduce_mean(combined_features, axis=1, keepdims=True)  # Pool across height (axis 1)
-        #tf.print("pooled_height shape", tf.shape(pooled_height))
-        # Step 5: Multiply the pooled results to create the attention map
-        attention_map = tf.sigmoid(pooled_width * pooled_height)
-        #tf.print("attention_map shape", tf.shape(attention_map))
-        # Step 6: Apply attention map to the dropped features
-        attention_output = x * attention_map
-        #tf.print("attention_output shape", tf.shape(attention_output))
-        # Step 7: Residual Connection
-        residual_output = self.final_conv(inputs)
-        output = attention_output + residual_output  # Residual connection
-        #tf.print("output shape", tf.shape(output))
-        return output
 
     
 class SEBlock(layers.Layer):

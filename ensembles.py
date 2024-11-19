@@ -130,19 +130,19 @@ def create_w_net(input_, unet_build):
 def create_w_net_ensemble(input_shape):
     inputs = layers.Input(shape=input_shape)
     # Load each model with the given weights
-    w_net1 = create_w_net(inputs, build_reverse_unet)
-    w_net1.load_weights("ensemble/wnet1_with_augmentation128x128d2f8.h5")
+    munet = models.build_munet((256, 256, 1), first_filters=32, depth=4, keep_prob=0.85, block_size=7, reduction=8, L=16)
+    munet.load_weights("ensemble/munet_with_amplification256x256d4f32b7kp0.85.h5")
 
-    w_net2 = create_w_net(inputs, build_standart_unet)
-    w_net2.load_weights("ensemble/wnet2_with_augmentation128x128d2f8.h5")
+    unet = models.create_unet((256, 256, 1), depth=4, num_filters=32)
+    unet.load_weights("ensemble/unet_with_amplification256x256d4f32.h5")
 
-    w_net3 = create_w_net(inputs, build_reversed_filters_unet)
-    w_net3.load_weights("ensemble/wnet3_with_augmentation128x128d2f8.h5")
+    wnet = models.create_w_net((256, 256, 1), depth=3, num_filters=32)
+    wnet.load_weights("ensemble/wnet_with_amplification256x256d3f32.h5")
 
     # Obtain only the last output from each model
-    output1 = w_net1(inputs)[-1]
-    output2 = w_net2(inputs)[-1]
-    output3 = w_net3(inputs)[-1]
+    output1 = munet(inputs)
+    output2 = unet(inputs)
+    output3 = wnet(inputs)[-1]
 
     # Binarize outputs based on threshold of 0.5
     binary_output1 = tf.cast(output1 > 0.5, tf.int32)
@@ -153,6 +153,7 @@ def create_w_net_ensemble(input_shape):
     votes = binary_output1 + binary_output2 + binary_output3
     final_output = tf.cast(votes >= 2, tf.float32)  # If at least 2 models voted 1, result is 1; else 0
 
-    return Model(inputs=inputs, outputs=output2)
-    #outputs = tf.reduce_mean([output1, output2, output3], axis=0)
-    #return Model(inputs=inputs, outputs=outputs)
+    return Model(inputs=inputs, outputs=final_output)
+    """output = tf.reduce_mean([output1, output2, output3], axis=0)
+    binary_output = tf.cast(output > 0.5, tf.int32)
+    return Model(inputs=inputs, outputs=final_output)"""
